@@ -4,7 +4,6 @@ import (
 	"elastic_web_service/internal/auth"
 	"elastic_web_service/internal/model"
 	"elastic_web_service/internal/repo"
-	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -89,12 +88,7 @@ func (h Handler) handleAPIPlaces(c *gin.Context) {
 	if !showNext {
 		response.NextPage = 0
 	}
-	c.Header("Content-Type", "application/json")
-	err = json.NewEncoder(c.Writer).Encode(response)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (h Handler) getTokenHandler(c *gin.Context) {
@@ -103,15 +97,7 @@ func (h Handler) getTokenHandler(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	response := map[string]string{
-		"token": token,
-	}
-	c.Header("Content-Type", "application/json")
-	err = json.NewEncoder(c.Writer).Encode(response)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
+	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
 func (h Handler) handleAPIRecommend(c *gin.Context) {
@@ -141,15 +127,10 @@ func (h Handler) handleAPIRecommend(c *gin.Context) {
 		return
 	}
 
-	response := map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"name":   "Recommendation",
 		"places": places,
-	}
-
-	c.Header("Content-Type", "application/json")
-	if err := json.NewEncoder(c.Writer).Encode(response); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-	}
+	})
 }
 
 func (h Handler) jwtMiddleware(c *gin.Context) {

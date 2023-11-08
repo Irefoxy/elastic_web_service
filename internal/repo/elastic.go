@@ -13,20 +13,19 @@ import (
 
 var _ Repo = (*Elastic)(nil)
 
-const address = "http://localhost:9200"
-
 type Elastic struct {
-	client *elasticsearch.Client
-	Index  string
+	address string
+	client  *elasticsearch.Client
+	Index   string
 }
 
-func NewRepo() *Elastic {
-	return &Elastic{}
+func NewRepo(address string) *Elastic {
+	return &Elastic{address: address}
 }
 
 func (es *Elastic) Init() error {
 	cfg := elasticsearch.Config{
-		Addresses: []string{address},
+		Addresses: []string{es.address},
 	}
 	esClient, err := elasticsearch.NewClient(cfg)
 	if err != nil {

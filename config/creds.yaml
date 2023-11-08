@@ -1,2 +1,3 @@
 Secret: "School21"
 Address: "localhost:8888"
+ElasticAddress: "http://localhost:9200"

@@ -38,7 +38,7 @@ func (p *provider) Service() service.Service {
 
 func (p *provider) Repo() repo.Repo {
 	if p.repo == nil {
-		p.repo = repo.NewRepo()
+		p.repo = repo.NewRepo(p.cfg.ElasticAddress)
 	}
 	return p.repo
 }

@@ -1,8 +1,9 @@
 package model
 
 type Config struct {
-	Secret  string `yaml:"Secret"`
-	Address string `yaml:"Address"`
+	Secret         string `yaml:"Secret"`
+	Address        string `yaml:"Address"`
+	ElasticAddress string `yaml:"ElasticAddress"`
 }
 
 type Place struct {
