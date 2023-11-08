@@ -6,9 +6,7 @@ import (
 	"elastic_web_service/internal/repo"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gin-gonic/gin"
-	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -33,7 +31,7 @@ func (h Handler) Run() error {
 
 func (h Handler) init() *gin.Engine {
 	r := gin.Default()
-	r.GET("/places", h.handleHTMLPlaces)
+	r.Use(h.errorMiddleware)
 	r.GET("/api/places", h.handleAPIPlaces)
 	r.GET("/api/recommend", h.jwtMiddleware, h.handleAPIRecommend)
 	r.GET("/api/get_token", h.getTokenHandler)
@@ -41,60 +39,11 @@ func (h Handler) init() *gin.Engine {
 	return r
 }
 
-func (h Handler) handleHTMLPlaces(c *gin.Context) {
-	// Parse page parameter from the URL query
-	pageStr, _ := c.GetQuery("page")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("wrong page"))
-		return
-	}
-	limit := 10                  // Number of places per page
-	offset := (page - 1) * limit // Calculate offset
-
-	// Get places from the store
-	places, total, err := h.Repo.GetPlaces(limit, offset)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	totalPages := total/limit + 1
-	showPrevious := page > 1
-	showNext := page < totalPages
-
-	if err != nil || page < 1 || page > totalPages {
-		c.AbortWithError(http.StatusBadRequest, errors.New("wrong page value"))
-		return
-	}
-
-	tmpl := template.Must(template.New("index.html").ParseFiles("./internal/templates/index.html"))
-	data := struct {
-		Total        int
-		Places       []model.Place
-		PrevURL      string
-		NextURL      string
-		LastURL      string
-		ShowNext     bool
-		ShowPrevious bool
-	}{
-		Total:        total,
-		Places:       places,
-		PrevURL:      fmt.Sprintf("/places?page=%d", page-1),
-		NextURL:      fmt.Sprintf("/places?page=%d", page+1),
-		LastURL:      fmt.Sprintf("/places?page=%d", total/limit+1),
-		ShowNext:     showNext,
-		ShowPrevious: showPrevious,
-	}
-
-	tmpl.Execute(c.Writer, data)
-}
-
 func (h Handler) handleAPIPlaces(c *gin.Context) {
 	pageStr, _ := c.GetQuery("page")
 	page, err := strconv.Atoi(pageStr)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("wrong page"))
+		c.AbortWithError(http.StatusBadRequest, errors.New("wrong page")).SetType(gin.ErrorTypePublic)
 		return
 	}
 	limit := 10
@@ -113,7 +62,7 @@ func (h Handler) handleAPIPlaces(c *gin.Context) {
 	showNext := page < totalPages
 
 	if err != nil || page < 1 || page > totalPages {
-		c.AbortWithError(http.StatusBadRequest, errors.New("wrong page value"))
+		c.AbortWithError(http.StatusBadRequest, errors.New("wrong page value")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -140,7 +89,7 @@ func (h Handler) handleAPIPlaces(c *gin.Context) {
 	if !showNext {
 		response.NextPage = 0
 	}
-
+	c.Header("Content-Type", "application/json")
 	err = json.NewEncoder(c.Writer).Encode(response)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -157,6 +106,7 @@ func (h Handler) getTokenHandler(c *gin.Context) {
 	response := map[string]string{
 		"token": token,
 	}
+	c.Header("Content-Type", "application/json")
 	err = json.NewEncoder(c.Writer).Encode(response)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -169,19 +119,19 @@ func (h Handler) handleAPIRecommend(c *gin.Context) {
 	lonStr, _ := c.GetQuery("lon")
 
 	if latStr == "" || lonStr == "" {
-		c.AbortWithError(http.StatusBadRequest, errors.New("invalid coordinates"))
+		c.AbortWithError(http.StatusBadRequest, errors.New("invalid coordinates")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
 	lat, err := strconv.ParseFloat(latStr, 64)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("invalid latitude"))
+		c.AbortWithError(http.StatusBadRequest, errors.New("invalid latitude")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
 	lon, err := strconv.ParseFloat(lonStr, 64)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("invalid longitude"))
+		c.AbortWithError(http.StatusBadRequest, errors.New("invalid longitude")).SetType(gin.ErrorTypePublic)
 		return
 	}
 
@@ -205,27 +155,34 @@ func (h Handler) handleAPIRecommend(c *gin.Context) {
 func (h Handler) jwtMiddleware(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
+		c.AbortWithError(http.StatusUnauthorized, errors.New("no authorization token")).SetType(gin.ErrorTypePublic)
 		return
 	}
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
+		c.AbortWithError(http.StatusUnauthorized, errors.New("wrong authorization token format")).SetType(gin.ErrorTypePublic)
 		return
 	}
 	ok, err := h.Auth.VerifyToken(tokenString)
 	if err != nil {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithError(http.StatusUnauthorized, err).SetType(gin.ErrorTypePublic)
 		return
 	}
 	if !ok {
-		c.AbortWithStatus(http.StatusUnauthorized)
+		c.AbortWithError(http.StatusUnauthorized, errors.New("invalid authorization token")).SetType(gin.ErrorTypePublic)
 		return
 	}
 	c.Next()
 }
 
 func (h Handler) errorMiddleware(c *gin.Context) {
+	c.Next()
 	if len(c.Errors) > 0 {
+		switch c.Errors[0].Type {
+		case gin.ErrorTypePublic:
+			c.JSON(-1, gin.H{"error": c.Errors[0].Error()})
+		default:
+			c.JSON(-1, gin.H{"error": "Something went wrong"})
+		}
 	}
 }
